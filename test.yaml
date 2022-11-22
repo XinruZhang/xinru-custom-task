@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: custom-task-pipeline
+spec:
+  tasks:
+  - name: wait
+    timeout: "1s"
+    retries: 2
+    taskSpec:
+      steps:
+      - image: ubuntu
+        script: 'true'
+    params:
+    - name: duration
+      value: "2s"
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: pr-custom-task-
+spec:
+  pipelineRef:
+    apiVersion: tekton.dev/v1beta1
+    name: custom-task-pipeline

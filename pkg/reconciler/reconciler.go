@@ -18,7 +18,6 @@ package reconciler
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
@@ -72,23 +71,24 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, r *v1alpha1.Run) kreconc
 		return nil
 	}
 
-	// Skip if the Run is cancelled.
-	if r.IsCancelled() {
-		logger.Infof("The Custom Task Run %v has been cancelled", r.GetName())
-		r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
-		var msg string = fmt.Sprint(r.Spec.StatusMessage)
-		if msg == "" {
-			msg = "The Wait Task is cancelled"
-		}
-		r.Status.MarkRunFailed("Cancelled", msg)
-		return nil
-	}
+	// // Skip if the Run is cancelled.
+	// if r.IsCancelled() {
+	// 	logger.Infof("The Custom Task Run %v has been cancelled", r.GetName())
+	// 	r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
+	// 	var msg string = fmt.Sprint(r.Spec.StatusMessage)
+	// 	if msg == "" {
+	// 		msg = "The Wait Task is cancelled"
+	// 	}
+	// 	r.Status.MarkRunFailed("Cancelled", msg)
+	// 	return nil
+	// }
 
 	if !r.HasStarted() {
 		logger.Info("Run hasn't started, start it")
 		r.Status.InitializeConditions()
 		r.Status.StartTime = &metav1.Time{Time: c.Clock.Now()}
 		r.Status.MarkRunRunning("Running", "Waiting for duration to elapse")
+		return controller.NewRequeueImmediately()
 	}
 
 	duration, err := time.ParseDuration(expr.Value.StringVal)
@@ -96,44 +96,51 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, r *v1alpha1.Run) kreconc
 		r.Status.MarkRunFailed("InvalidDuration", "The duration param was invalid: %v", err)
 		return nil
 	}
-	timeout := r.GetTimeout()
-	if duration == timeout {
-		r.Status.MarkRunFailed("InvalidTimeOut", "Spec.Timeout shouldn't equal duration")
-		return nil
-	}
-	elapsed := c.Clock.Since(r.Status.StartTime.Time)
+
+	// timeout := r.GetTimeout()
+	// if duration == timeout {
+	// 	r.Status.MarkRunFailed("InvalidTimeOut", "Spec.Timeout shouldn't equal duration")
+	// 	return nil
+	// }
+	// elapsed := c.Clock.Since(r.Status.StartTime.Time)
+
+	time.Sleep(duration)
+
+	logger.Infof("The Custom Task Run %v finished", r.GetName())
+	r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
+	r.Status.MarkRunSucceeded("DurationElapsed", "The wait duration has elapsed")
 
 	// Custom Task is running and not timed out
-	if r.Status.StartTime != nil && elapsed <= duration && elapsed <= timeout {
-		logger.Infof("The Custom Task Run %s is running", r.GetName())
-		waitTime := duration.Nanoseconds()
-		if timeout.Nanoseconds() < waitTime {
-			waitTime = timeout.Nanoseconds()
-		}
-		return controller.NewRequeueAfter(time.Duration(waitTime))
-	}
+	// if r.Status.StartTime != nil && elapsed <= duration && elapsed <= timeout {
+	// 	logger.Infof("The Custom Task Run %s is running", r.GetName())
+	// 	waitTime := duration.Nanoseconds()
+	// 	if timeout.Nanoseconds() < waitTime {
+	// 		waitTime = timeout.Nanoseconds()
+	// 	}
+	// 	return controller.NewRequeueAfter(time.Duration(waitTime))
+	// }
 
-	if r.Status.StartTime != nil && elapsed > duration && elapsed <= timeout {
-		logger.Infof("The Custom Task Run %v finished", r.GetName())
-		r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
-		r.Status.MarkRunSucceeded("DurationElapsed", "The wait duration has elapsed")
-		return nil
-	}
+	// if r.Status.StartTime != nil && elapsed > duration && elapsed <= timeout {
+	// 	logger.Infof("The Custom Task Run %v finished", r.GetName())
+	// 	r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
+	// 	r.Status.MarkRunSucceeded("DurationElapsed", "The wait duration has elapsed")
+	// 	return nil
+	// }
 
-	// Custom Task timed out
-	if r.Status.StartTime != nil && elapsed > timeout {
-		logger.Infof("The Custom Task Run %v timed out", r.GetName())
-		r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
-		r.Status.MarkRunFailed("TimedOut", "Custom Task Run %v timed out")
-		return nil
-	}
+	// // Custom Task timed out
+	// if r.Status.StartTime != nil && elapsed > timeout {
+	// 	logger.Infof("The Custom Task Run %v timed out", r.GetName())
+	// 	r.Status.CompletionTime = &metav1.Time{Time: c.Clock.Now()}
+	// 	r.Status.MarkRunFailed("TimedOut", "Custom Task Run %v timed out")
+	// 	return nil
+	// }
 
-	// Retry if the current RetriesStatus hasn't reached the retries limit
-	if r.Spec.Retries > len(r.Status.RetriesStatus) {
-		logger.Infof("Run timed out, retrying... %#v", r.Status)
-		retryRun(r)
-		return controller.NewRequeueImmediately()
-	}
+	// // Retry if the current RetriesStatus hasn't reached the retries limit
+	// if r.Spec.Retries > len(r.Status.RetriesStatus) {
+	// 	logger.Infof("Run timed out, retrying... %#v", r.Status)
+	// 	retryRun(r)
+	// 	return controller.NewRequeueImmediately()
+	// }
 
 	// Don't emit events on nop-reconciliations, it causes scale problems.
 	return nil
